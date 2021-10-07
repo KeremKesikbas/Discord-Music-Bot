@@ -10,4 +10,9 @@ for filename in os.listdir("./src"):
     if filename.endswith(".py"):
         client.load_extension(f"src.{filename[:-3]}")
 
-client.run(os.getenv('TOKEN'))
+
+tokenFile = open("Token.txt", "r")
+
+Token: str = tokenFile.read()
+
+client.run(Token)

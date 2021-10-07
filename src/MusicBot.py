@@ -277,7 +277,7 @@ class MusicBot(commands.Cog):
         self.commandList.append(CommandData("leave", "(disconnect)", "Exits voice channel and clears playlist"))
         self.commandList.append(CommandData("pause", "", "Pauses the current playing song"))
         self.commandList.append(CommandData("resume", "", "Resumes the current playing song"))
-        self.commandList.append(CommandData("skip", "(s, fs)", "Skips the current playing son"))
+        self.commandList.append(CommandData("skip", "(s, fs)", "Skips the current playing song"))
         self.commandList.append(CommandData("now", "(np, playing)", "Shows the current playing song"))
         self.commandList.append(CommandData("shuffle", "", "Shuffles the playist"))
         self.commandList.append(CommandData("loop", "", "Loops the current playing song"))
