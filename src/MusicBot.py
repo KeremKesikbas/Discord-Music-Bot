@@ -197,7 +197,7 @@ class Queue():
 
             if not self.loop:
                 try:
-                    async with timeout(90):
+                    async with timeout(1):
                         self.currentSong = await self.songList.get()
 
                         self.songHistory.append(self.currentSong)
@@ -224,6 +224,7 @@ class Queue():
             await self.voice.disconnect()
             self.voice = None
             self.loop = False
+            self.audioPlayer = None
 
     async def pause(self):
         if self.voice:
@@ -363,7 +364,6 @@ class MusicBot(commands.Cog):
             await ctx.send("u are not in a voice channel")
 
     @commands.command(name="leave", aliases=["disconnect"])
-    @commands.has_permissions(manage_guild=True)
     async def leave(self, ctx: commands.Context):
         if not self.queue.voice:
             return await ctx.send("Im not connected to any voice channel")
@@ -371,21 +371,18 @@ class MusicBot(commands.Cog):
         await self.queue.stop()
 
     @commands.command(name="pause")
-    @commands.has_permissions(manage_guild=True)
     async def pause(self, ctx: commands.Context):
         if self.queue.voice.is_playing():
             await self.queue.pause()
             await ctx.message.add_reaction('⏹')
 
     @commands.command(name="resume")
-    @commands.has_permissions(manage_guild=True)
     async def resume(self, ctx: commands.Context):
         if self.queue.voice.is_paused():
             await self.queue.voice.resume()
             await ctx.message.add_reaction('⏯')
 
     @commands.command(name="skip", aliases=["s", "fs"])
-    @commands.has_permissions(manage_guild=True)
     async def skip(self, ctx: commands.Context):
         if not self.voice.is_playing():
             return await ctx.send("Nothing playing right now")
@@ -402,7 +399,6 @@ class MusicBot(commands.Cog):
         await ctx.send(embed=self.queue.currentSong.createEmbed("Now Playing"))
 
     @commands.command(name="shuffle")
-    @commands.has_permissions(manage_guild=True)
     async def shuffle(self, ctx: commands.Context):
         if len(self.queue.songList) == 0:
             return await ctx.send("Song queue is empty")
@@ -412,7 +408,6 @@ class MusicBot(commands.Cog):
         await ctx.message.add_reaction('✅')
 
     @commands.command(name="loop")
-    @commands.has_permissions(manage_guild=True)
     async def loop(self, ctx: commands.Context):
         if not self.voice.is_playing():
             return await ctx.send("Nothing playing right now")
@@ -421,7 +416,6 @@ class MusicBot(commands.Cog):
         await ctx.message.add_reaction('✅')
     
     @commands.command(name="unloop")
-    @commands.has_permissions(manage_guild=True)
     async def unloop(self, ctx: commands.Context):
         if not self.voice.is_playing():
             return await ctx.send("Nothing playing right now")
@@ -430,7 +424,6 @@ class MusicBot(commands.Cog):
         await ctx.message.add_reaction('✅')
 
     @commands.command(name="remove")
-    @commands.has_permissions(manage_guild=True)
     async def remove(self, ctx: commands.Command, *song: str):
         if len(self.queue.songList) == 0:
             return await ctx.send("Song queue is empty")
@@ -476,7 +469,7 @@ class MusicBot(commands.Cog):
 
         await self.queue.songList.put(Song(info, ctx.message.author, ctx.message.author.voice.channel))
 
-        if not self.queue.audioPlayer:
+        if self.queue.audioPlayer:
             self.queue.audioPlayer = self.client.loop.create_task(self.queue.startAudio())
 
         await ctx.message.add_reaction('✅')
