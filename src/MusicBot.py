@@ -197,7 +197,7 @@ class Queue():
 
             if not self.loop:
                 try:
-                    async with timeout(1):
+                    async with timeout(90):
                         self.currentSong = await self.songList.get()
 
                         self.songHistory.append(self.currentSong)
@@ -366,7 +366,7 @@ class MusicBot(commands.Cog):
     @commands.command(name="leave", aliases=["disconnect"])
     async def leave(self, ctx: commands.Context):
         if not self.queue.voice:
-            return await ctx.send("Im not connected to any voice channel")
+            return await ctx.send("I'm not connected to any voice channel")
 
         await self.queue.stop()
 
@@ -455,21 +455,21 @@ class MusicBot(commands.Cog):
     @commands.command(name="play", aliases=["p"])
     async def play(self, ctx: commands.Context, *search: str):
 
-        await ctx.invoke(self.join)
-
         result = ""
 
         for s in search:
             result += s + " "
 
         if result == "":
-            await ctx.send("i can't play nothing.")
+            await ctx.send("i can't play **nothing**.")
 
         info = await getSongDatas(ctx, result, self.client.loop)
 
+        await ctx.invoke(self.join)
+
         await self.queue.songList.put(Song(info, ctx.message.author, ctx.message.author.voice.channel))
 
-        if self.queue.audioPlayer:
+        if not self.queue.audioPlayer:
             self.queue.audioPlayer = self.client.loop.create_task(self.queue.startAudio())
 
         await ctx.message.add_reaction('✅')
