@@ -413,11 +413,27 @@ class MusicBot(commands.Cog):
             await ctx.message.add_reaction('⏯')
 
     @commands.command(name="skip", aliases=["s", "fs"])
-    async def skip(self, ctx: commands.Context):
+    async def skip(self, ctx: commands.Context, *num):
+        resultNum: int = 0
+
+        try:
+            resultNum = int(num[0])
+            
+        except:
+            return await ctx.send("Invalid argument")
+
         if not self.queue.voice.is_playing():
             return await ctx.send("Nothing playing right now")
         
+        if resultNum < 0:
+            return await ctx.send("Invalid argument")
+
         self.queue.voice.stop()
+
+        skipCount = min(len(self.queue.songList), resultNum) - 1
+
+        for i in range(skipCount):
+            self.queue.songList.remove(0)
 
         await ctx.message.add_reaction('✅')
 
