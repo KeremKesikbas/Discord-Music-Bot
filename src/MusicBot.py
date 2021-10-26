@@ -53,33 +53,31 @@ FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'
 }
 
-async def getSongDatas(ctx: commands.Context, search: str, loop: asyncio.BaseEventLoop = None):
-    ytdl = YoutubeDL(YTDL_OPTIONS)
+##########################
 
-    if loop is None:
-        loop = asyncio.get_event_loop()
+async def joinVoice(queue, client: commands.Bot, ctx: commands.Context):
+    author: Member = ctx.message.author
 
-    partial = functools.partial(ytdl.extract_info, search, download=False, process=False)
-    data = await loop.run_in_executor(None, partial)
+    if author.voice is not None:
+        channel: VoiceChannel = author.voice.channel
 
-    if data is None:
-        await ctx.send(f"I couldn't find any result for \"{search}\"")
+        voice = get(client.voice_clients, guild=ctx.guild)
 
-    if 'entries' not in data:
-        process_info = data
+        if voice and voice.is_connected():
+            await voice.move_to(channel)
+
+        else:
+            voice = await channel.connect()
+
+        queue.voice = voice
+
     else:
-        process_info = None
+        await ctx.send("u are not in a voice channel")
 
-        for entry in data['entries']:
-            if entry:
-                process_info = entry
-                await ctx.send(process_info)
-                break
+######################
 
-        if process_info is None:
-            await ctx.send(f"I couldn't find any result for \"{search}\"")
-    
-    webpage_url = process_info['webpage_url']
+async def parseVideo(data, ytdl, ctx: commands.Context, loop: asyncio.BaseEventLoop):
+    webpage_url = data['webpage_url']
     partial = functools.partial(ytdl.extract_info, webpage_url, download=False)
     processed_info = await loop.run_in_executor(None, partial)
 
@@ -90,13 +88,62 @@ async def getSongDatas(ctx: commands.Context, search: str, loop: asyncio.BaseEve
         info = processed_info
     else:
         info = None
+
         while info is None:
             try:
                 info = processed_info['entries'].pop(0)
+
             except IndexError:
                 await ctx.send(f"I couldn't get the data from {webpage_url}")
 
     return info
+
+async def prepareQueue(queue, client: commands.Bot, ctx: commands.Context, search: str, loop: asyncio.BaseEventLoop = None):
+    ytdl = YoutubeDL(YTDL_OPTIONS)
+
+    song = None
+
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    partial = functools.partial(ytdl.extract_info, search, download=False, process=False)
+    data = await loop.run_in_executor(None, partial)
+
+    if data is None:
+        await ctx.send(f"I couldn't find any result for \"{search}\"")
+
+        return
+
+    await joinVoice(queue, client, ctx)
+
+    if 'entries' not in data:
+        song = await parseVideo(data, ytdl, ctx, loop)
+
+        await queue.songList.put(Song(song, ctx.message.author, ctx.message.author.voice.channel))
+
+        if not queue.audioPlayer:
+            queue.audioPlayer = client.loop.create_task(queue.startAudio())
+
+    else:
+        # Playlist parsing
+
+        for entry in data['entries']:
+            if entry:
+                url = f"https://www.youtube.com/watch?v={entry['url']}"
+
+                vPartial = functools.partial(ytdl.extract_info, url, download=False, process=False)
+                vData = await loop.run_in_executor(None, vPartial)
+
+                song = await parseVideo(vData, ytdl, ctx,loop)
+
+                await queue.songList.put(Song(song, ctx.message.author, ctx.message.author.voice.channel))
+
+                if not queue.audioPlayer:
+                    queue.audioPlayer = client.loop.create_task(queue.startAudio())
+
+    return queue
+
+##############################33
 
 def parse_duration(duration: int):
     minutes, seconds = divmod(duration, 60)
@@ -265,7 +312,6 @@ class MusicBot(commands.Cog):
     
     def __init__(self, client: commands.Bot):
         self.client: commands.Bot = client
-        self.voice: VoiceClient = None
 
         self.queue: Queue = Queue(client)
 
@@ -326,7 +372,7 @@ class MusicBot(commands.Cog):
 
     @commands.command(name="queue", aliases=["q"])
     async def queue(self, ctx: commands.Context):
-        if not self.voice.is_playing():
+        if not self.queue.voice.is_playing():
             return await ctx.send("Nothing playing right now")
 
         qEmbed: Embed = Embed(title="Playlist", color= Color.dark_grey())
@@ -345,23 +391,7 @@ class MusicBot(commands.Cog):
 
     @commands.command(name="join")
     async def join(self, ctx: commands.Context):
-        author: Member = ctx.message.author
-
-        if author.voice is not None:
-            channel: VoiceChannel = author.voice.channel
-
-            self.voice = get(self.client.voice_clients, guild=ctx.guild)
-
-            if self.voice and self.voice.is_connected():
-                await self.voice.move_to(channel)
-
-            else:
-                self.voice = await channel.connect()
-
-            self.queue.voice = self.voice
-
-        else:
-            await ctx.send("u are not in a voice channel")
+        await joinVoice(self.queue, self.client, ctx)
 
     @commands.command(name="leave", aliases=["disconnect"])
     async def leave(self, ctx: commands.Context):
@@ -384,7 +414,7 @@ class MusicBot(commands.Cog):
 
     @commands.command(name="skip", aliases=["s", "fs"])
     async def skip(self, ctx: commands.Context):
-        if not self.voice.is_playing():
+        if not self.queue.voice.is_playing():
             return await ctx.send("Nothing playing right now")
         
         self.queue.voice.stop()
@@ -393,7 +423,7 @@ class MusicBot(commands.Cog):
 
     @commands.command(name="now", aliases=["np", "playing"])
     async def np(self, ctx: commands.Context):
-        if not self.voice.is_playing():
+        if not self.queue.voice.is_playing():
             return await ctx.send("Nothing playing right now")
 
         await ctx.send(embed=self.queue.currentSong.createEmbed("Now Playing"))
@@ -409,7 +439,7 @@ class MusicBot(commands.Cog):
 
     @commands.command(name="loop")
     async def loop(self, ctx: commands.Context):
-        if not self.voice.is_playing():
+        if not self.queue.voice.is_playing():
             return await ctx.send("Nothing playing right now")
 
         self.queue.loop = True
@@ -417,7 +447,7 @@ class MusicBot(commands.Cog):
     
     @commands.command(name="unloop")
     async def unloop(self, ctx: commands.Context):
-        if not self.voice.is_playing():
+        if not self.queue.voice.is_playing():
             return await ctx.send("Nothing playing right now")
 
         self.queue.loop = False
@@ -463,14 +493,7 @@ class MusicBot(commands.Cog):
         if result == "":
             await ctx.send("i can't play **nothing**.")
 
-        info = await getSongDatas(ctx, result, self.client.loop)
-
-        await ctx.invoke(self.join)
-
-        await self.queue.songList.put(Song(info, ctx.message.author, ctx.message.author.voice.channel))
-
-        if not self.queue.audioPlayer:
-            self.queue.audioPlayer = self.client.loop.create_task(self.queue.startAudio())
+        self.queue = await prepareQueue(self.queue, self.client, ctx, result, self.client.loop)
 
         await ctx.message.add_reaction('✅')
 
