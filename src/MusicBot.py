@@ -230,7 +230,6 @@ class Queue():
         self.currentSong: Song = None
 
         self.songList = SongQueue()
-        self.songHistory = []
 
         self.loop = False # loops the current song
 
@@ -246,8 +245,6 @@ class Queue():
                 try:
                     async with timeout(90):
                         self.currentSong = await self.songList.get()
-
-                        self.songHistory.append(self.currentSong)
 
                 except asyncio.TimeoutError:
                     self.client.loop.create_task(self.stop())
@@ -324,7 +321,7 @@ class MusicBot(commands.Cog):
         self.commandList.append(CommandData("leave", "(disconnect)", "Exits voice channel and clears playlist"))
         self.commandList.append(CommandData("pause", "", "Pauses the current playing song"))
         self.commandList.append(CommandData("resume", "", "Resumes the current playing song"))
-        self.commandList.append(CommandData("skip", "(s, fs)", "Skips the current playing song"))
+        self.commandList.append(CommandData("skip", "(s, fs)", "Skips the songs. Argument is optional and can take num or \"all\"", "count"))
         self.commandList.append(CommandData("now", "(np, playing)", "Shows the current playing song"))
         self.commandList.append(CommandData("shuffle", "", "Shuffles the playist"))
         self.commandList.append(CommandData("loop", "", "Loops the current playing song"))
@@ -414,19 +411,29 @@ class MusicBot(commands.Cog):
 
     @commands.command(name="skip", aliases=["s", "fs"])
     async def skip(self, ctx: commands.Context, *num):
-        resultNum: int = 0
-
-        try:
-            resultNum = int(num[0])
-            
-        except:
-            return await ctx.send("Invalid argument")
-
         if not self.queue.voice.is_playing():
             return await ctx.send("Nothing playing right now")
+
+        resultNum: int = 0
+
+        if len(num) != 0:
+            if num[0] != "all":
+                try:
+                    resultNum = int(num[0])
         
-        if resultNum < 0:
-            return await ctx.send("Invalid argument")
+                except:
+                    return await ctx.send("Invalid argument")
+            
+                if resultNum <= 0:
+                    return await ctx.send("Invalid argument")
+
+            else:
+                self.queue.songList.clear()
+                self.queue.voice.stop()
+
+                await ctx.message.add_reaction('✅')
+
+                return
 
         self.queue.voice.stop()
 
